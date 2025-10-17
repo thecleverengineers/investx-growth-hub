@@ -88,9 +88,33 @@ const DepositWalletsManagement = () => {
     }
 
     try {
+      const currency = formData.currency.toUpperCase();
+      const network = formData.network;
+
+      // Check for duplicate currency/network combination
+      if (!editingWallet || 
+          editingWallet.currency !== currency || 
+          editingWallet.network !== network) {
+        const { data: existing } = await supabase
+          .from('deposit_wallets')
+          .select('id')
+          .eq('currency', currency)
+          .eq('network', network)
+          .maybeSingle();
+
+        if (existing) {
+          toast({
+            title: 'Duplicate Entry',
+            description: `A deposit wallet for ${currency} on ${network} network already exists. Please edit the existing one or use a different currency/network combination.`,
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
       const walletData = {
-        currency: formData.currency.toUpperCase(),
-        network: formData.network,
+        currency: currency,
+        network: network,
         wallet_address: formData.wallet_address,
         wallet_label: formData.wallet_label || null,
         min_deposit_amount: parseFloat(formData.min_deposit_amount),
