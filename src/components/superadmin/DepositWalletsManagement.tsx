@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Edit, Trash2, QrCode } from 'lucide-react';
+import { Plus, Edit, Trash2, QrCode, Upload, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface DepositWallet {
@@ -48,6 +48,9 @@ const DepositWalletsManagement = () => {
     require_confirmation: false,
     auto_detect_transactions: false,
   });
+  const [qrCodeFile, setQrCodeFile] = useState<File | null>(null);
+  const [qrCodePreview, setQrCodePreview] = useState<string | null>(null);
+  const [uploadingQr, setUploadingQr] = useState(false);
 
   useEffect(() => {
     fetchWallets();
@@ -72,6 +75,40 @@ const DepositWalletsManagement = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQrCodeUpload = async (file: File): Promise<string | null> => {
+    try {
+      setUploadingQr(true);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('deposit-qr-codes')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('deposit-qr-codes')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error: any) {
+      console.error('Error uploading QR code:', error);
+      toast({
+        title: 'Upload Error',
+        description: error.message || 'Failed to upload QR code',
+        variant: 'destructive',
+      });
+      return null;
+    } finally {
+      setUploadingQr(false);
     }
   };
 
@@ -112,6 +149,24 @@ const DepositWalletsManagement = () => {
         }
       }
 
+      // Upload QR code if a new file was selected
+      let qrCodeUrl = formData.qr_code_url;
+      if (qrCodeFile) {
+        const uploadedUrl = await handleQrCodeUpload(qrCodeFile);
+        if (uploadedUrl) {
+          qrCodeUrl = uploadedUrl;
+          // Delete old QR code if updating
+          if (editingWallet?.qr_code_url) {
+            const oldPath = editingWallet.qr_code_url.split('/').pop();
+            if (oldPath) {
+              await supabase.storage
+                .from('deposit-qr-codes')
+                .remove([oldPath]);
+            }
+          }
+        }
+      }
+
       const walletData = {
         currency: currency,
         network: network,
@@ -119,7 +174,7 @@ const DepositWalletsManagement = () => {
         wallet_label: formData.wallet_label || null,
         min_deposit_amount: parseFloat(formData.min_deposit_amount),
         network_fee_notice: formData.network_fee_notice || null,
-        qr_code_url: formData.qr_code_url || null,
+        qr_code_url: qrCodeUrl || null,
         show_qr_code: formData.show_qr_code,
         is_active: formData.is_active,
         require_confirmation: formData.require_confirmation,
@@ -177,6 +232,8 @@ const DepositWalletsManagement = () => {
       require_confirmation: wallet.require_confirmation,
       auto_detect_transactions: wallet.auto_detect_transactions,
     });
+    setQrCodePreview(wallet.qr_code_url);
+    setQrCodeFile(null);
     setDialogOpen(true);
   };
 
@@ -221,6 +278,42 @@ const DepositWalletsManagement = () => {
       require_confirmation: false,
       auto_detect_transactions: false,
     });
+    setQrCodeFile(null);
+    setQrCodePreview(null);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: 'Invalid File',
+          description: 'Please upload an image file',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: 'File Too Large',
+          description: 'Please upload an image smaller than 5MB',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setQrCodeFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setQrCodePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeQrCode = () => {
+    setQrCodeFile(null);
+    setQrCodePreview(null);
+    setFormData({ ...formData, qr_code_url: '' });
   };
 
   if (loading) {
@@ -324,13 +417,41 @@ const DepositWalletsManagement = () => {
               </div>
 
               <div>
-                <Label htmlFor="qr_code_url">QR Code URL (Optional)</Label>
-                <Input
-                  id="qr_code_url"
-                  placeholder="https://example.com/qr-code.png"
-                  value={formData.qr_code_url}
-                  onChange={(e) => setFormData({ ...formData, qr_code_url: e.target.value })}
-                />
+                <Label htmlFor="qr_code">QR Code Image (Optional)</Label>
+                <div className="space-y-3">
+                  {qrCodePreview ? (
+                    <div className="relative inline-block">
+                      <img 
+                        src={qrCodePreview} 
+                        alt="QR Code Preview" 
+                        className="w-32 h-32 object-contain border rounded-lg"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-6 w-6"
+                        onClick={removeQrCode}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="qr_code"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="cursor-pointer"
+                      />
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Upload a QR code image (max 5MB)
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-3 pt-2">
@@ -372,8 +493,8 @@ const DepositWalletsManagement = () => {
               </div>
 
               <div className="flex gap-2 pt-4">
-                <Button type="submit" className="flex-1">
-                  {editingWallet ? 'Update' : 'Create'} Wallet
+                <Button type="submit" className="flex-1" disabled={uploadingQr}>
+                  {uploadingQr ? 'Uploading...' : editingWallet ? 'Update Wallet' : 'Create Wallet'}
                 </Button>
                 <Button
                   type="button"
@@ -382,6 +503,7 @@ const DepositWalletsManagement = () => {
                     resetForm();
                     setDialogOpen(false);
                   }}
+                  disabled={uploadingQr}
                 >
                   Cancel
                 </Button>
