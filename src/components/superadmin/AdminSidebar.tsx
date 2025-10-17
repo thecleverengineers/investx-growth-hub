@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Users, Lock, Database, Settings, ChevronLeft, ChevronRight, TrendingUp, PiggyBank, Briefcase, DollarSign, Layers, BarChart3, Wallet, ArrowDownToLine } from 'lucide-react';
+import { Activity, Users, Lock, Database, Settings, ChevronLeft, ChevronRight, TrendingUp, PiggyBank, Briefcase, DollarSign, Layers, BarChart3, Wallet, ArrowDownToLine, Landmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -18,6 +18,7 @@ const sections = [
   { id: 'forex', label: 'Forex Records', icon: BarChart3 },
   { id: 'roi', label: 'ROI Investments', icon: PiggyBank },
   { id: 'usdt', label: 'USDT Staking', icon: DollarSign },
+  { id: 'deposit-wallets', label: 'Deposit Wallets', icon: Landmark },
   { id: 'deposits', label: 'Deposits', icon: Wallet },
   { id: 'withdrawals', label: 'Withdrawals', icon: ArrowDownToLine },
   { id: 'plans', label: 'Investment Plans', icon: Briefcase },
