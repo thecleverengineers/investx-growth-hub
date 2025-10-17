@@ -155,6 +155,31 @@ const Wallet = () => {
       return;
     }
 
+    // Check if user has completed at least one deposit
+    try {
+      const { data: hasDeposit, error: checkError } = await supabase
+        .rpc('user_has_completed_deposit', { p_user_id: user?.id });
+
+      if (checkError) throw checkError;
+
+      if (!hasDeposit) {
+        toast({
+          title: "Deposit Required",
+          description: "You must complete at least one deposit before making a withdrawal",
+          variant: "destructive",
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking deposit history:', error);
+      toast({
+        title: "Verification Failed",
+        description: "Unable to verify deposit history. Please contact support.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setWithdrawing(true);
     try {
       const amount = parseFloat(withdrawAmount);
@@ -398,7 +423,8 @@ const Wallet = () => {
                   <Alert className="bg-yellow-500/10 border-yellow-500/20">
                     <AlertCircle className="h-4 w-4 text-yellow-400" />
                     <AlertDescription className="text-yellow-300">
-                      Withdrawals require admin approval and may take 24-48 hours to process.
+                      • You must have at least one completed deposit to withdraw<br />
+                      • Withdrawals require admin approval and may take 24-48 hours to process
                     </AlertDescription>
                   </Alert>
 
